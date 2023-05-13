@@ -12,34 +12,24 @@ from natsort import natsorted
 
 
 # class A_TrajTools:
-def addpresentation(vw, style=None, colors=None, radius_s=None):
-    '''
-    :param vw: nglview view
-    :param style: 'ball+stick' 'ball' ...
-    :param colors: color of each atoms group
-    :param radius_s: radius of each atoms group
-    :return:
-    '''
-    vw.clear()
-    vw.clear_representations()
+def addpresentation(v):
+    v.clear()
+    v.clear_representations()
     atom_selections = ''
-    if not style:
-        style = 'ball+stick'
-    if not colors:
-        colors = ['silver','red','black','green','white','pink']
-        chainIDs = [':A',':B',':C',':D',':E',':F']
-        repr_type = ['spacefill']*len(chainIDs)
-    if not radius_s:
-        radius_s=['0.8','0.8','0.8','0.8','0.6','0.8']
-
-    vw.add_representation(style, colorScheme='element', radiusType='size', multibond='symmetric')
-    for i in range(len(chainIDs)):
-        vw.add_representation(repr_type[i], selection=chainIDs[i] + atom_selections, color=colors[i],
-                              radius=radius_s[i])  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
-    vw.player.parameters = dict(delay=0.004, step=-1)
-    # vw.background = 'black'
-
-    return vw
+    v.add_representation('ball')
+    v.add_representation('spacefill', selection=':A' + atom_selections, color='silver', radius='0.8')  # ## atom
+    # name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    v.add_representation('spacefill', selection=':B' + atom_selections, color='red',
+                         radius='0.8')  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    v.add_representation('spacefill', selection=':C' + atom_selections, color='black',
+                         radius='0.8')  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    v.add_representation('spacefill', selection=':D' + atom_selections, color='green',
+                         radius='0.8')  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    v.add_representation('spacefill', selection=':E' + atom_selections, color='white',
+                         radius='0.4')  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    v.add_representation('spacefill', selection=':F' + atom_selections, color='pink',
+                         radius='0.8')  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    return v
 
 
 def importtrj(topo, trj, elements, dt=0, chainIDs=None, topo_format='DATA', in_memory=True,
@@ -568,3 +558,148 @@ def rewrite_lammpsdump(lammpsdata, lammpsdump):
 def vw(u):
     v = nv.show_mdanalysis(u)
     return v
+
+
+def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxyz=False):
+    """
+    withxyz #使用xyz文件作为缓存文件
+    """
+    if Mname is None:
+        Mname = ['Al', 'O', 'Al']
+    print(f'visualizing {inputdata}')
+    F = open(inputdata)
+    f = F.readlines()
+
+    Positions = []
+    Mmass = []
+    dims = []
+    Matomtypes = None
+    for i in f:
+        # print(i)
+        x = i.split()
+        if len(x) == 9 and x[0].isnumeric():
+            # lammps data file (charge)
+            # atom-ID atom-type q
+            posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+            # posi = [atom-ID atom-type x y z]
+            # i = '\t'.join(posi) + '\n'
+            # FF.append(i)
+            # atom-ID atom-type q -> zatom-ID atom-type q x y z
+            Positions.append(posi)
+
+        elif len(x) == 2 and x[0].isnumeric():
+            try:
+                type(float(x[-1]))
+                Mmass.append(i.split()[1])
+                Matomtypes = int(x[0])
+            except:
+                yyy = 1
+
+        elif len(x) == 4:
+            if str(x[-1]).endswith('hi'):  # dimansion
+                i = i.strip('\n')
+                dims.append(i)
+        else:
+            yyy = 1
+
+    if len(Positions) == 0:  # 防止是vmd转换的data文件
+        for i in f:
+            x = i.split()
+            if len(x) == 6 and x[0].isnumeric():
+                posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+                Positions.append(posi)
+    F.close()
+
+    # print(Positions)
+    print(f"Mmass {Mmass} \nMname:{Mname} \ndims:{dims} \nMatomtypes:{Matomtypes}")
+    # 将获取的atom 坐标信息按照原子id 从小到大排序
+    # posi = [atom-ID atom-type x y z]
+    Positions = natsorted(Positions)
+
+    posi_types = []
+    for i in range(Matomtypes):
+        type_i_posi = []
+        posi_types.append(type_i_posi)
+        element = Mname[i]
+        for k in Positions:
+            if k[1] == str(i + 1):
+                k[1] = element  # 替换原子的type 为原子名称
+                k.pop(0)  # 删除atom id
+                type_i_posi.append(k)  # k=[elements,x,y,z]
+        posi_types[i] = type_i_posi
+
+    ABCDE = string.ascii_uppercase
+    if withxyz:
+        New = '/tmp/xxxx.xyz'
+        N = open(New, 'w')
+        N.write(str(len(Positions)) + '\n\n')
+        print('总原子数', len(Positions))
+        # 按原子顺序，依次写入 elements x y z到文件
+        for index, type_i_posi in enumerate(posi_types):
+            print('type', index, len(type_i_posi))
+            for i in type_i_posi:
+                N.write('  '.join(i) + '\n')
+        N.close()
+
+        u = mda.Universe(New)
+        print('加入chainID')
+        indices = 0
+        u.add_TopologyAttr('chainID')
+        for type_i, type_i_posi in enumerate(posi_types):
+            stri = ' '.join([str(i) for i in list(range(indices, indices + len(type_i_posi)))])
+            indices += len(type_i_posi)
+            # u.select_atoms('index '+stri).chainID=[ABCDE[i]]*len(u.select_atoms('index '+stri))
+            u.select_atoms('index ' + stri).chainIDs = ABCDE[type_i]
+
+    else:
+        print('write with pdb')
+        New = '/tmp/xxxx.pdb'
+        N = open(New, 'w')
+        N.write('TITLE     MDANALYSIS FRAMES FROM 0, STEP 1: Created by PDBWriter\n')
+        # 可从dim变量中获取box尺寸
+        N.write('CRYST1  180.000  180.000  180.000  90.00  90.00  90.00 P 1           1\n')
+        N.write('MODEL        1\n')
+
+        print('总原子数', len(Positions))
+        # 按原子顺序，依次写入 elements x y z到文件
+        indices = 0
+        for type_i, type_i_posi in enumerate(posi_types):
+            print('type', type_i, len(type_i_posi))
+            for idx, pos in enumerate(type_i_posi):
+                fmt = {
+                    'ATOM': (
+                        "ATOM  {serial:5d} {name:<4s}{altLoc:<1s}{resName:<4s}"
+                        "{chainID:1s}{resSeq:4d}{iCode:1s}"
+                        "   {pos[0]:8.3f}{pos[1]:8.3f}{pos[2]:8.3f}{occupancy:6.2f}"
+                        "{tempFactor:6.2f}      {segID:<4s}{element:>2s}{charge:2s}\n"),
+                    'REMARK': "REMARK     {0}\n",
+                    'CONECT': "CONECT{0}\n"
+                }
+
+                vals = {'serial': indices + idx + 1, 'name': str(Mname[type_i]), 'chainID': str(ABCDE[type_i]),
+                        'pos': [float(p) for p in pos[1:]], 'charge': '0', 'altLoc': ' ', 'resName': 'UNK',
+                        'resSeq': 1,
+                        'iCode': ' ', 'occupancy': 1.0, 'tempFactor': 0.0, 'segID': ' ', 'element': ' '}
+                # --------------------
+
+                # print(fmt['ATOM'])
+                line_i = fmt['ATOM'].format(**vals)
+                N.write(line_i)
+
+            indices += len(type_i_posi)
+        N.write('ENDMDL\n')
+        N.write('END\n')
+        N.close()
+        # ensure the position is not out of boundary
+        u = mda.Universe(New)
+        # determine boundry
+        print('修正Al原子质量')
+        u.select_atoms('name Al').masses = [26.98153860] * len(u.select_atoms('name Al'))
+
+    atoms = u.select_atoms('all')
+    dist_arr = distances.distance_array(atoms.positions, atoms.centroid(), box=u.dimensions)
+    dist_arr_self = distances.self_distance_array(atoms.positions, box=u.dimensions)
+    print(f"共计算{len(dist_arr)}个原子距box center的距离，最小是{dist_arr.min()}，最大是{dist_arr.max()}")
+    print(f"共计算{len(dist_arr_self)}对原子间距离，最小距离为{dist_arr_self.min()},最大距离为{dist_arr_self.max()}")
+    v = nv.show_mdanalysis(atoms)
+    return u, v

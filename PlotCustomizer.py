@@ -1,15 +1,42 @@
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.ticker import FuncFormatter
-from plotly.subplots import make_subplots
+import tables
+from scipy.ndimage import gaussian_filter1d
+from scipy.interpolate import interp1d
+from numpy import diff
+from itertools import repeat
+from functools import partial
+import freud
+from MDAnalysis import transformations
+import ase
+from IPython.display import display
+from ipywidgets import IntProgress
+import time
+# from mpl_toolkits.mplot3d import Axes3D
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import scienceplots
 
-# from plotly.subplots import make_subplots
+# import tables
+# from scipy.ndimage import gaussian_filter1d
+# from scipy.interpolate import interp1d
+# from numpy import diff
+# from itertools import repeat
+# from functools import partial
+# import freud
+# from MDAnalysis import transformations
+# import ase
+# from IPython.display import display
+# from ipywidgets import IntProgress
+# import time
+# # from mpl_toolkits.mplot3d import Axes3D
 # import plotly.graph_objects as go
 # import plotly.express as px
+# from plotly.subplots import make_subplots
 # import scienceplots
+
 plt.style.use(['science', 'ieee'])
 plt.style.use('science')
 
@@ -26,7 +53,24 @@ default_params = {'font.family': 'Times',
                   # 'mathtext.default': 'regular', ## 上下标/math类text字体
                   # 'xtick.labelsize':5
                   }
-
+default_params = {"text.usetex": False,
+                  # 'font.family': 'Microsoft YaHei',
+                  'font.family': 'Times New Roman',
+                  'mathtext.fontset': 'custom',
+                  'mathtext.rm': 'Times New Roman',
+                  'mathtext.it': 'Times New Roman:italic',
+                  'mathtext.bf': 'Times New Roman:bold',
+                  # 'mathtext.default': 'regular', ## 上下标/math类text字体
+                  'font.style':'normal',
+                  # 'font.weight':'bold',
+                  'font.size': 15,
+                  # 'figure.dpi': 300,
+                  # 'figure.edgecolor': 'white',
+                  # 'figure.facecolor': 'white',
+                  # 'figure.figsize': [6.4, 4.8],
+                  'figure.figsize': [8, 6],
+                  # 'xtick.labelsize':5
+                  }
 
 def formatnum(x, pos):
     try:

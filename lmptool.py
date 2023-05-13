@@ -1,3 +1,9 @@
+import MDAnalysis as mda
+import nglview as nv
+from natsort import natsorted
+from MDAnalysis.analysis import distances
+import string
+
 def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxyz=False):
     """
     withxyz #使用xyz文件作为缓存文件
@@ -153,7 +159,6 @@ def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxy
     return u, v
 
 def visualize_mda_universe_via_plotly(u):
-    import MDAnalysis as mda
     import plotly.graph_objects as go
 
     # get the coordinates of all atoms in the simulation
@@ -177,3 +182,187 @@ def visualize_mda_universe_via_plotly(u):
     fig = go.Figure(data=[trace], layout=layout)
     fig.show()
     return fig
+
+def rewrite_mda_lammpsdata(lmpfiles,zerocharge=False): ### 有charge 针对DCD文件导出
+    F = open(lmpfiles)
+    f = F.readlines()
+    FF = []
+    charged = False
+    noncharged = False
+    for i in f:
+        if len(i.split()) <= 4: ## 非数据内容
+            if i.startswith('Atoms'):
+                i = 'Atoms # charge\n'
+            if i.endswith('xhi\n') or i.endswith('yhi\n') or i.endswith('zhi\n'):
+                k = i.split()
+                dim = float(k[1])/2
+                i = str(-dim) +' '+ str(dim)+' '+str(k[-2])+' '+str(k[-1])+'\n'
+            else:
+                i = i
+            FF.append(i)
+        elif len(i.split()) == 7: #deal with chargeed atom
+            x = i.split()
+            del x[1] ##################################################### charge 做了修改 保持不变！！！！！！！！！！！！！！！！！！！！！
+            if zerocharge:
+                x[2] = str('0.000000')
+            i = '\t'.join(x) + '\n'
+            FF.append(i)
+            charged = True
+        elif len(i.split()) == 6: # deal with non-charge atom
+            x = i.split()
+            del x[1]
+            x.insert(2, '0.000000')
+            i = '\t'.join(x) + '\n'
+            FF.append(i)
+            noncharged = True
+            charged = False
+        else:
+            i = i
+            FF.append(i)
+    if charged and not zerocharge:
+        print('Rewrite charge data')
+        MyFile=open(lmpfiles+'_withcharge.lmp','w')
+    if charged and zerocharge:
+        print('Rewrite charge data but zerolize_charge')
+        MyFile=open(lmpfiles+'_withzerocharge.lmp','w')
+    if noncharged:
+        print('Rewrite non-charge data')
+        MyFile=open(lmpfiles+'_withoutcharge.lmp','w')
+    MyFile.writelines(FF)
+    MyFile.close()
+
+def merge_lammps_data(Master,Slave,New):
+    ## read master
+    M = open(Master)
+    f = M.readlines()
+    Mvolicity = []
+    Matom = []
+    Mmass = []
+    dims = []
+    for i in f:
+        # print(i)
+        x = i.split()
+        if len(x) >= 6 and x[0].isnumeric():
+            x = x
+            i = ' '.join(x) + '\n'
+            # FF.append(i)
+            Matom.append(i.split())
+
+        elif len(x) == 2 and x[0].isnumeric():
+            try:
+                type(float(x[-1]))
+                Mmass.append(i.split()[1])
+                Matomtypes = int(x[0])
+            except:
+                yyy=1
+
+        elif len(x) == 4:
+            if x[0].isnumeric():
+                Mvolicity.append(i.split())
+            if str(x[-1]).endswith('hi'): ## dimansion
+                dims.append(i)
+        else:
+            yyy = 1
+    M.close()
+
+    ##### read slave
+    S = open(Slave)
+    f = S.readlines()
+    Svolicity = []
+    Satom = []
+    Smass = []
+    for i in f:  ## isnumeric() 是否由数字组成
+        # print(i)
+        x = i.split()
+        if len(x) >= 6 and x[0].isnumeric():
+            x = x
+            i = ' '.join(x) + '\n'
+            # FF.append(i)
+            Satom.append(i.split())
+        elif len(x) == 2 and x[0].isnumeric():
+            try:
+                type(float(x[-1]))
+                Smass.append(i.split()[1])
+                Satomtypes = int(x[0])
+            except:
+                yyy=1
+
+        elif len(x) == 4 and x[0].isnumeric():
+            Svolicity.append(i.split())
+        else:
+            yyy =1
+    S.close()
+
+    try:
+        print(Svolicity[0])
+    except:
+        print('Slave has no volicity')
+
+    totaltypes = Matomtypes + Satomtypes
+    masses = Mmass + Smass
+
+    ### add missed data
+    ##
+    for i in range(0,len(Satom)):
+        Satomindex = i+1+len(Matom)
+        Satomtype = int(Satom[i][1]) + Matomtypes
+        Satom[i][1] = str(Satomtype)
+        Satom[i][0] = str(Satomindex)
+        Satom[i].insert(6,'0')
+        Satom[i].insert(7,'0')
+        Satom[i].insert(8,'0')
+        Svolicity.append([str(Satomindex), '0.000000', '0.000000', '0.000000'])
+
+    ## write to file
+    N = open(New,'w')
+    N.write('LAMMPS data file via MDAnalysis\n')
+    N.write('\n')
+    N.write('{:>12d}  atoms\n'.format(len(Matom)+len(Satom)))
+    N.write('{:>12d}  atom types\n'.format(totaltypes))
+    N.write('\n')
+    N.write(dims[0])
+    N.write(dims[1])
+    N.write(dims[2])
+    N.write('\n')
+    N.write('Masses\n')
+    N.write('\n')
+
+    for i in range(totaltypes):
+        N.write(str(i+1)+'\t'+masses[i]+'\n')
+
+    N.write('\n')
+    N.write('Atoms # charge\n')
+    N.write('\n')
+
+
+    Matom = natsorted(Matom)
+    Satom = natsorted(Satom)
+    Mvolicity = natsorted(Mvolicity)
+    Svolicity = natsorted(Svolicity)
+
+
+    print('Write Matom: ',len(Matom))
+    for i in range(len(Matom)):
+        item = '\t'.join(Matom[i])+'\n'
+        N.write(item)
+
+    print('Write Satom: ',len(Satom))
+    for i in range(len(Satom)):
+        item = '\t'.join(Satom[i])+'\n'
+        N.write(item)
+
+    N.write('\n')
+    N.write('Velocities\n')
+    N.write('\n')
+
+    print('Write Mvolicity: ',len(Mvolicity))
+    for i in range(len(Mvolicity)):
+        item = '\t'.join(Mvolicity[i])+'\n'
+        N.write(item)
+
+    print('Write Svolicity: ',len(Svolicity))
+    for i in range(len(Svolicity)):
+        item = '\t'.join(Svolicity[i])+'\n'
+        N.write(item)
+    print('done!')
+    N.close()

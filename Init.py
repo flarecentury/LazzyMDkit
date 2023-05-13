@@ -1,6 +1,6 @@
 import os
 import ipynbname
-from .PlotCustomizer import *
+from LazzyMDkit.PlotCustomizer import *
 
 class IntEnv:
     def __init__(self):

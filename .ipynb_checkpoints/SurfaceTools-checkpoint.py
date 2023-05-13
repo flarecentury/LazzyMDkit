@@ -1,5 +1,5 @@
 import uuid
-import os
+
 import nglview as nv
 import numpy as np
 import open3d as o3d
@@ -8,7 +8,7 @@ import pyvista as pv
 import tqdm
 from scipy.spatial import distance
 
-from LazzyMDkit.PlotCustomizer import *
+from .PlotCustomizer import *
 
 pv.set_jupyter_backend('pythreejs')
 
@@ -23,25 +23,14 @@ class SurfaceTools:
         return positions
 
     def test_alpha_outlier_removal(self, positions, frame=0, nb_points=20, radius=10, info=False):
-        '''
-        :param positions:
-        :param frame:
-        :param nb_points: pcd.remove_radius_outlier which lets you pick the minimum amount of points that the sphere should contain.
-        :param radius: pcd.remove_radius_outlier  which defines the radius of the sphere that will be used for counting the neighbors.
-        :param info:
-        :return:
-        '''
         areas = []
         volumes = []
         alphas = range(120)[::1]
         # print(times[frame],'ps')
         for alpha in tqdm.tqdm(alphas):
             pos = positions[frame]
-            uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-            pv.PolyData(pos).save(uuidname, binary=False, texture=None)
-            pcd = o3d.io.read_point_cloud(uuidname)
-            os.remove(uuidname)
-
+            pv.PolyData(pos).save('/tmp/pointcloud.ply', binary=False, texture=None)
+            pcd = o3d.io.read_point_cloud('/tmp/pointcloud.ply')
             # uni_down_pcd = pcd.uniform_down_sample(every_k_points=5)
             # voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.5)
 
@@ -57,12 +46,10 @@ class SurfaceTools:
             mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
             mesh.compute_vertex_normals()
             try:
-                uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-                o3d.io.write_triangle_mesh(uuidname, mesh, write_ascii=True, compressed=False,
+                o3d.io.write_triangle_mesh('/tmp/tmp.ply', mesh, write_ascii=True, compressed=False,
                                            write_vertex_normals=True, write_vertex_colors=True, write_triangle_uvs=True,
                                            print_progress=False)
-                meshx = pv.read(uuidname)
-                os.remove(uuidname)
+                meshx = pv.read('/tmp/tmp.ply')
                 areas.append(meshx.area)
                 volumes.append(meshx.volume)
             except:
@@ -85,14 +72,6 @@ class SurfaceTools:
         fig.show()
 
     def test_nb_points_radius_outlier_removal(self, positions, frame=0, alpha=75, info=False):
-        '''
-        上方地带dou'sh
-        :param positions:
-        :param frame:
-        :param alpha: o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape A smaller alpha value will result in a more detailed and complex shape, while a larger alpha value will result in a simpler shape with fewer edges and vertices.
-        :param info:
-        :return:
-        '''
         areas = []
         volumes = []
         radius_s = range(20)[1::1]
@@ -104,10 +83,8 @@ class SurfaceTools:
         for radius in tqdm.tqdm(radius_s):
             for nb_points in nb_points_s:
                 pos = positions[frame]
-                uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-                pv.PolyData(pos).save(uuidname, binary=False, texture=None)
-                pcd = o3d.io.read_point_cloud(uuidname)
-                os.remove(uuidname)
+                pv.PolyData(pos).save('/tmp/pointcloud.ply', binary=False, texture=None)
+                pcd = o3d.io.read_point_cloud('/tmp/pointcloud.ply')
                 # uni_down_pcd = pcd.uniform_down_sample(every_k_points=5)
                 # voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.5)
 
@@ -123,12 +100,11 @@ class SurfaceTools:
                 try:
                     mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
                     mesh.compute_vertex_normals()
-                    uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-                    o3d.io.write_triangle_mesh(uuidname, mesh, write_ascii=True, compressed=False,
+
+                    o3d.io.write_triangle_mesh('/tmp/tmp.ply', mesh, write_ascii=True, compressed=False,
                                                write_vertex_normals=True, write_vertex_colors=True,
                                                write_triangle_uvs=True, print_progress=False)
-                    meshx = pv.read(uuidname)
-                    os.remove(uuidname)
+                    meshx = pv.read('/tmp/tmp.ply')
                     areas.append(meshx.area)
                     volumes.append(meshx.volume)
                     volume_map.append([radius, nb_points, meshx.volume])
@@ -180,11 +156,11 @@ class SurfaceTools:
         mesh_s = []
 
         # for pos in tqdm(positions):
-        for pos in positions:
+        for pos in tqdm.tqdm(positions):
             uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
+            alpha = alpha
             pv.PolyData(pos).save(uuidname, binary=False, texture=None)
             pcd = o3d.io.read_point_cloud(uuidname)
-            os.remove(uuidname)
 
             # voxel_size=1
             # uni_down_pcd = pcd.uniform_down_sample(every_k_points=5)
@@ -232,18 +208,16 @@ class SurfaceTools:
         # mesh area/volume of every frame
         mesh_area_s = []
         mesh_volume_s = []
-        for mesh_i in mesh_s:
+        for mesh_i in tqdm.tqdm(mesh_s):
             vv, meshx = self.visual_mesh(mesh_i, opacity=0.8)
             mesh_area_s.append(meshx.area)
             mesh_volume_s.append(meshx.volume)
         return mesh_area_s, mesh_volume_s
 
     def visual_mesh_with_corner(self, mesh, opacity=0.8):
-        uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-        o3d.io.write_triangle_mesh(uuidname, mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
+        o3d.io.write_triangle_mesh('/tmp/tmp.ply', mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
                                    write_vertex_colors=True, write_triangle_uvs=True, print_progress=False)
-        meshx = pv.read(uuidname)
-        os.remove(uuidname)
+        meshx = pv.read('/tmp/tmp.ply')
 
         pl = pv.Plotter(window_size=(800, 800))
         meshx.texture_map_to_plane(inplace=True)
@@ -274,11 +248,9 @@ class SurfaceTools:
 
     # without corner
     def visual_mesh(self, mesh, opacity=0.8):
-        uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
-        o3d.io.write_triangle_mesh(uuidname, mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
+        o3d.io.write_triangle_mesh('/tmp/tmp.ply', mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
                                    write_vertex_colors=True, write_triangle_uvs=True, print_progress=False)
-        meshx = pv.read(uuidname)
-        os.remove(uuidname)
+        meshx = pv.read('/tmp/tmp.ply')
 
         pl = pv.Plotter()
         meshx.texture_map_to_plane(inplace=True)
@@ -297,12 +269,10 @@ class SurfaceTools:
 
     def visual_mesh_2(self, mesh_s, positions, frame=0, opacity=0.8, pointcolor='black', whirecolor='orange'):
         mesh = mesh_s[frame]
-        uuidname = '/tmp/pick_' + str(uuid.uuid4()) + '.ply'
 
-        o3d.io.write_triangle_mesh(uuidname, mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
+        o3d.io.write_triangle_mesh('/tmp/tmp.ply', mesh, write_ascii=True, compressed=False, write_vertex_normals=True,
                                    write_vertex_colors=True, write_triangle_uvs=True, print_progress=False)
-        meshx = pv.read(uuidname)
-        os.remove(uuidname)
+        meshx = pv.read('/tmp/tmp.ply')
 
         pl = pv.Plotter()
         meshx.texture_map_to_plane(inplace=True)
@@ -336,33 +306,21 @@ class SurfaceTools:
         v = nv.show_file(mda.Universe('/tmp/1.xyz'))
         return v
 
-    def indicing_shell_atoms(self, atomgroup, shell_ranges=None, alpha=75, nb_points=20, radius=19, debug=False):
-        '''
-        :param atomgroup:
-        :param shell_ranges:[[0, 3], [1, 3], [3, 5]]
-        :param alpha: o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape A smaller alpha value will result in a more detailed and complex shape, while a larger alpha value will result in a simpler shape with fewer edges and vertices.
-        :param nb_points: pcd.remove_radius_outlier which lets you pick the minimum amount of points that the sphere should contain.
-        :param radius: pcd.remove_radius_outlier  which defines the radius of the sphere that will be used for counting the neighbors.
-        :return:
-        '''
+    def indicing_shell_atoms(self, atomgroup, shell_thickness=8, alpha=75, nb_points=20, radius=10):
         # ################## 使用alpha shhape 找到表面锚点，并标记
-        if shell_ranges is None:
-            shell_ranges = [[0, 3], [1, 3], [3, 5]]
         atoms = atomgroup
 
         points_pos = atoms.positions
         indices_all = atoms.indices
         positions = [points_pos, ]
-        if debug:
-            print('Start meshing')
-        labeled_surface_points, mesh_s = self.surface_mesh_s(positions, alpha, nb_points, radius)
+
+        labeled_surface_points, mesh_s = self.surface_mesh_s(positions, alpha=alpha, nb_points=nb_points, radius=radius)
         # surface_indices = surface_indice(positions_df,surface_pos)
         mesh_area_s, mesh_volume_s = self.mesh_area_volume_s(mesh_s)
 
         # clearn_up_tmp_dir(patens=['*.dcd','*.ply',])
         # !ls /tmp
-        if debug:
-            print(f'标记的表面锚点数目:{len(labeled_surface_points[0])},表面锚点mesh覆盖区域:{mesh_area_s}')
+        print(f'标记的表面锚点数目:{len(labeled_surface_points[0])},表面锚点mesh覆盖区域:{mesh_area_s}')
 
         # ################### 依据标记的锚点，找到距其一定范围内的点
         surface_points = np.asarray(labeled_surface_points[0])  # 表面锚点
@@ -371,73 +329,59 @@ class SurfaceTools:
         distances = distance.cdist(surface_points, points_pos)
 
         # Find the minimum distance for each point
-        min_distances = np.min(distances, axis=0) ## 每个点与离他最近的锚点的距离
+        min_distances = np.min(distances, axis=0)
 
         # Label all points within the shell with the shell thickness of 5
-        # points_within_shell = np.where(shell_thickness_range_min <= min_distances <= shell_thickness_range_max, True, False)
-        indice_shell_s=[]
-        surfaceAtomSearched=False
-        for ii,shell_range in enumerate(shell_ranges):
-            shell_thickness_range_min,shell_thickness_range_max=shell_range
-            points_within_shell = np.logical_and(min_distances >= shell_thickness_range_min, min_distances <= shell_thickness_range_max)
+        points_within_shell = np.where(min_distances <= shell_thickness, True, False)
 
-            labeled_shell_points = []
-            for i, x in enumerate(points_within_shell):
-                if x:
-                    labeled_shell_points.append(points_pos[i])
-            labeled_shell_points = np.asarray(labeled_shell_points) # positions
+        labeled_shell_points = []
+        for i, x in enumerate(points_within_shell):
+            if x:
+                labeled_shell_points.append(points_pos[i])
+        labeled_shell_points = np.asarray(labeled_shell_points)
 
-            # ########### 匹配到mdanalysis Universe对象中的坐标，
-            def match_atom_indices(s_points):
-                # 匹配表面锚点和shell原子indices
-                idx_s = []
-                # slower
-                # for idx,pos_i in enumerate(points_pos):
-                #     for labeled_pos_i in labeled_points:
-                #         vec1=labeled_pos_i
-                #         vec2=pos_i
-                #         dist = np.sqrt(np.sum(np.square(vec1 - vec2)))
-                #         if dist <= 0.2:
-                #             idx_s.append(idx)
-                # faster
-                # 匹配
-                for idx, pos_i in enumerate(points_pos):
-                    for labeled_pos_i in s_points:
-                        x1, y1, z1 = labeled_pos_i
-                        x, y, z = pos_i
-                        delta_limit = 0.01
-                        if abs(x - x1) <= delta_limit:
-                            if abs(y - y1) <= delta_limit:
-                                if abs(z - z1) <= delta_limit:
-                                    idx_s.append(idx)
+        # ########### 匹配到maanalysis Universe对象中的坐标，
+        print('匹配表面锚点和shell原子indices...')
+        idx_s_all = []
+        for s_points in [surface_points, labeled_shell_points]:
+            # 匹配表面锚点和shell原子indices
+            idx_s = []
+            # slower
+            # for idx,pos_i in enumerate(points_pos):
+            #     for labeled_pos_i in labeled_points:
+            #         vec1=labeled_pos_i
+            #         vec2=pos_i
+            #         dist = np.sqrt(np.sum(np.square(vec1 - vec2)))
+            #         if dist <= 0.2:
+            #             idx_s.append(idx)
+            # faster
+            # 匹配
+            for idx, pos_i in enumerate(tqdm.tqdm(points_pos)):
+                for labeled_pos_i in s_points:
+                    x1, y1, z1 = labeled_pos_i
+                    x, y, z = pos_i
+                    delta_limit = 0.01
+                    if abs(x - x1) <= delta_limit:
+                        if abs(y - y1) <= delta_limit:
+                            if abs(z - z1) <= delta_limit:
+                                idx_s.append(idx)
 
+            print(f'共遍历原子{len(points_pos)}个，匹配到表面锚点{len(idx_s)}个')
+            if len(s_points) == len(idx_s):
+                print('匹配无误')
+            else:
+                print('匹配出错')
+                print(f'需匹配原子{len(s_points)}个，匹配到{len(idx_s)}个')
+            idx_s_all.append(idx_s)
 
-                if len(s_points) == len(idx_s):
-                    if debug:
-                        print(f'共遍历原子{len(points_pos)}个，匹配到{len(idx_s)}个原子')
-                else:
-                    print('匹配出错')
-                    print(f'需匹配原子{len(s_points)}个，匹配到{len(idx_s)}个')
-                return idx_s
+        # ############# 找到对应的真实indice
+        idx_surface, idx_shell = idx_s_all
 
-            # ############# 找到对应的真实indice
-            if not surfaceAtomSearched: # 只搜索一次锚点原子
-                if debug:
-                    print('# 匹配 表面锚点原子 indices...')
-                idx_surface = match_atom_indices(surface_points)
-                indice_surface = []
-                for idx, indice in enumerate(indices_all):
-                    if idx in idx_surface:
-                        indice_surface.append(indice)
-            surfaceAtomSearched=True
-
-            indice_shell = []
-            if debug:
-                print(f'# 匹配 第 {ii} 层shell原子 indices, Current shell range: {shell_range}')
-            idx_shell = match_atom_indices(labeled_shell_points)
-            for idx, indice in enumerate(indices_all):
-                if idx in idx_shell:
-                    indice_shell.append(indice)
-
-            indice_shell_s.append(indice_shell)
-        return indice_surface, indice_shell_s
+        indice_surface = []
+        indice_shell = []
+        for idx, indice in enumerate(indices_all):
+            if idx in idx_shell:
+                indice_shell.append(indice)
+            if idx in idx_surface:
+                indice_surface.append(indice)
+        return indice_surface, indice_shell

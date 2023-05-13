@@ -1,91 +1,114 @@
 import numpy as np
 import pandas as pd
-from .PlotCustomizer import *
+from LazzyMDkit.PlotCustomizer import *
 
 
 def readthermolog(logfile, timestep=0.5, plot=True, a=0, b=-1, skip=1):
     global title, check, check0, NU_param
-    with open(logfile, encoding="utf8", errors='ignore') as log:
-        lmplog = log.readlines()
-    print(logfile)
-
-    wflag = False
-    isdata = False
-    newline = []
-    result = []
-    counter = 0
-    index = 'X'
-    # replica = [] # 对应下方replica代码
-
-    for line in lmplog:  # 按行读入文件，此时line的type是str
-        if line.startswith("Loop"):  # 重置写标记
+    def read_thermo_log_to_df(logfile):
+        with open(logfile, encoding="utf8", errors='ignore') as log:
+            lmplog = log.readlines()
+            print(logfile)
             wflag = False
             isdata = False
+            newline = []
+            result = []
+            counter = 0
             index = 'X'
-        if "Step" in line:  # 检验是否到了要写入的内容
-            counter += 1
-            check0 = counter
-            wflag = True
-            result = [[j] for j in line.split()]
-            NU_param = len(line.split())
-            title = line.split()
-            index = 0
-            # isdata == False
-            continue
-        if wflag:
-            # print(index)
-            check = counter
-            index += 1
-            if index == 2:  # 设置为1则从第一行开始，设置为2则从第二行数据开始，但有点小问题，会缺少一些数据
-                isdata = True
-        if isdata and index != 'X' and check == check0:
-            if "ERROR" not in line and 'Last c' not in line and 'WARNING:' not in line:
-                # print(line)
-                if line.split()[0].isnumeric and len(line.split()) == NU_param:  # 防止数据还未生成完全的row被加入结果
-                    newline.append(line)
-                    # remove replica ####
-                    # if line not in newline:
-                    #     newline.append(line)
-                    # else:
-                    #     replica.append(line)
-                else:
-                    print('Found incomplete line:', line)
-    alllines = []
-    for line in newline:
-        linetolist = line.split()
-        alllines.append(linetolist)
-        for ncol in range(len(linetolist)):
-            result[ncol].append(linetolist[ncol])
+            # replica = [] # 对应下方replica代码
 
-    float_result = []
-    print('ncols: ', len(result))
-    for i in result:
-        i.pop(0)  # 去除i list的第一个数据 title
-        i = list(np.float_(i))  # 转换剩余数据为np array
-        float_result.append(i)
-    print('loop: ', counter)  # loop数目
+            for line in lmplog:  # 按行读入文件，此时line的type是str
+                if line.startswith("Loop"):  # 重置写标记
+                    wflag = False
+                    isdata = False
+                    index = 'X'
+                if "Step" in line:  # 检验是否到了要写入的内容
+                    counter += 1
+                    check0 = counter
+                    wflag = True
+                    result = [[j] for j in line.split()]
+                    NU_param = len(line.split())
+                    title = line.split()
+                    index = 0
+                    # isdata == False
+                    continue
+                if wflag:
+                    # print(index)
+                    check = counter
+                    index += 1
+                    if index == 2:  # 设置为1则从第一行开始，设置为2则从第二行数据开始，但有点小问题，会缺少一些数据
+                        isdata = True
+                if isdata and index != 'X' and check == check0:
+                    if "ERROR" not in line and 'Last c' not in line and 'WARNING:' not in line:
+                        # print(line)
+                        if line.split()[0].isnumeric and len(line.split()) == NU_param:  # 防止数据还未生成完全的row被加入结果
+                            newline.append(line)
+                            # remove replica ####
+                            # if line not in newline:
+                            #     newline.append(line)
+                            # else:
+                            #     replica.append(line)
+                        else:
+                            print('Found incomplete line:', line)
+        alllines = []
+        for line in newline:
+            linetolist = line.split()
+            alllines.append(linetolist)
+            for ncol in range(len(linetolist)):
+                result[ncol].append(linetolist[ncol])
 
-    dt = float(timestep)  # fs
-    times = [i * dt / 1000 for i in float_result[0]]
-    print('simulated frames (duplica results are includes): ', len(result[0]))
-    print('simulated time: ', round(float(times[-1]), 2), ' ps')
+        float_result = []
+        print('ncols: ', len(result))
+        for i in result:
+            i.pop(0)  # 去除i list的第一个数据 title
+            i = list(np.float_(i))  # 转换剩余数据为np array
+            float_result.append(i)
+        print('loop: ', counter)  # loop数目
 
-    title = '\t'.join(title) + '\n'
-    titles = title.split()
+        title = '\t'.join(title) + '\n'
+        titles = title.split()
+        datas = []
+        for line in alllines:
+            d = '\t'.join(line) + '\n'
+            datas.append([float(i) for i in d.split()])
+        df = pd.DataFrame.from_records(datas, columns=titles)
+        df = df.drop_duplicates(subset=['Step'])
+        df['Step'] = df['Step'].astype(int)
 
-    datas = []
-    for line in alllines:
-        d = '\t'.join(line) + '\n'
-        datas.append([float(i) for i in d.split()])
-    columns = titles
-    df = pd.DataFrame.from_records(datas, columns=columns)
-    df['Step'] = df['Step'].astype(int)
-    df = df.drop_duplicates()
+        dt = float(timestep)  # fs
+        times = [i * dt / 1000 for i in df['Step'].to_list()]
+        print('simulated frames (duplica results are includes): ', len(result[0]))
+        print('simulated time: ', round(float(times[-1]), 2), ' ps')
+
+        return titles,times,df
+
+    if isinstance(logfile, list):
+        print('Multi_logfile as input!')
+        df_s=[]
+        times_s=[]
+        for logf in logfile:
+            titles,times,df = read_thermo_log_to_df(logf)
+            df = df.drop_duplicates(subset=['Step'])
+            df_s.append(df)
+            times_s.append(times)
+        times_with_duplicates = []
+        for lst in times_s:
+            times_with_duplicates.extend(lst)
+        times=[]
+        for t in times_with_duplicates:
+            if t not in times:
+                times.append(t)
+        df = pd.concat(df_s, axis=0)
+        df = df.drop_duplicates(subset=['Step'])
+    else:
+        print('Single_logfile as input!')
+        titles,times,df = read_thermo_log_to_df(logfile)
 
     title_dic = {}
     for idx, t in enumerate(titles):
         title_dic[idx] = t
     print(title_dic)
+    columns=titles
 
     if plot:
         c_reaxdict = {'v_eb': 'bond energy', 'v_ea': 'atom energy', 'v_elp': 'lone-pair energy',
@@ -124,7 +147,7 @@ def readthermolog(logfile, timestep=0.5, plot=True, a=0, b=-1, skip=1):
                     print('skipping meaningless plot: ' + str(columns[y_picked_col]) + ' vs. ' + str(
                         columns[y_picked_col]))
             plt.show()
-    return df[a:b:skip]
+    return df
 
 
 def checklog(Lastlog=0, logfile=''):

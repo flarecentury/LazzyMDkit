@@ -7,7 +7,7 @@ from os import listdir
 from os.path import isfile, join
 import numpy as np
 import pandas as pd
-from .Utils import run_mp
+from LazzyMDkit.Utils import run_mp
 
 
 class ReadLAMMPSdump:
@@ -183,7 +183,7 @@ def read_lammpsdump_from_pickle():
             number = list(map(int, re.findall(r'\d+', test_string)))[0]
             return number
         except:
-            print(f'not found num in: {test_string},return 9999999')
+            print(f'skip {test_string}')
             return 9999999
 
     fileslist = [f for f in listdir('tmp_trj') if isfile(join('tmp_trj', f))]
