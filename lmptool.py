@@ -18,41 +18,96 @@ def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxy
     Mmass = []
     dims = []
     Matomtypes = None
-    for i in f:
-        # print(i)
-        x = i.split()
-        if len(x) == 9 and x[0].isnumeric():
-            # lammps data file (charge)
-            # atom-ID atom-type q
-            posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
-            # posi = [atom-ID atom-type x y z]
-            # i = '\t'.join(posi) + '\n'
-            # FF.append(i)
-            # atom-ID atom-type q -> zatom-ID atom-type q x y z
-            Positions.append(posi)
 
-        elif len(x) == 2 and x[0].isnumeric():
-            try:
-                type(float(x[-1]))
-                Mmass.append(i.split()[1])
-                Matomtypes = int(x[0])
-            except:
+    def read_charge_style_data(f):
+        for i in f:
+            # print(i)
+            x = i.split()
+            if len(x) == 9 and x[0].isnumeric():
+                # lammps data file (charge)
+                # atom-ID atom-type q
+                posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+                # posi = [atom-ID atom-type x y z]
+                # i = '\t'.join(posi) + '\n'
+                # FF.append(i)
+                # atom-ID atom-type q -> zatom-ID atom-type q x y z
+                Positions.append(posi)
+
+            elif len(x) == 2 and x[0].isnumeric():
+                try:
+                    type(float(x[-1]))
+                    Mmass.append(i.split()[1])
+                    Matomtypes = int(x[0])
+                except:
+                    yyy = 1
+
+            elif len(x) == 4:
+                if str(x[-1]).endswith('hi'):  # dimansion
+                    i = i.strip('\n')
+                    dims.append(i)
+            else:
                 yyy = 1
 
-        elif len(x) == 4:
-            if str(x[-1]).endswith('hi'):  # dimansion
-                i = i.strip('\n')
-                dims.append(i)
-        else:
-            yyy = 1
+        if len(Positions) == 0:  # 防止是vmd转换的data文件
+            for i in f:
+                x = i.split()
+                if len(x) == 6 and x[0].isnumeric():
+                    posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+                    Positions.append(posi)
+        F.close()
+        return Positions,Mmass,dims,Matomtypes
 
-    if len(Positions) == 0:  # 防止是vmd转换的data文件
+    def read_atoms_style_data(f):
         for i in f:
+            # print(i)
             x = i.split()
-            if len(x) == 6 and x[0].isnumeric():
+            if len(x) == 8 and x[0].isnumeric():
+                # lammps data file (charge)
+                # atom-ID atom-type q
                 posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+                # posi = [atom-ID atom-type x y z]
+                # i = '\t'.join(posi) + '\n'
+                # FF.append(i)
+                # atom-ID atom-type q -> zatom-ID atom-type q x y z
                 Positions.append(posi)
-    F.close()
+
+            elif len(x) == 2 and x[0].isnumeric():
+                try:
+                    type(float(x[-1]))
+                    Mmass.append(i.split()[1])
+                    Matomtypes = int(x[0])
+                except:
+                    yyy = 1
+
+            elif len(x) == 4:
+                if str(x[-1]).endswith('hi'):  # dimansion
+                    i = i.strip('\n')
+                    dims.append(i)
+            else:
+                yyy = 1
+
+        if len(Positions) == 0:  # 防止是vmd转换的data文件
+            for i in f:
+                x = i.split()
+                if len(x) == 6 and x[0].isnumeric():
+                    posi = [x[0], x[1], str(float(x[3])), str(float(x[4])), str(float(x[5]))]
+                    Positions.append(posi)
+        F.close()
+        return Positions,Mmass,dims,Matomtypes
+
+    for i in f:
+        if i.startswith('Atoms'):
+            datafiletype_string = i.split()[-1]
+            break
+    if 'atomic' in datafiletype_string:
+        print('data file style:',datafiletype_string)
+        Positions,Mmass,dims,Matomtypes = read_atoms_style_data(f)
+    elif 'charge' in datafiletype_string:
+        print('data file style:',datafiletype_string)
+        Positions,Mmass,dims,Matomtypes = read_charge_style_data(f)
+    else:
+        print('uknow datafile type, reading with charge style:',datafiletype_string)
+        Positions,Mmass,dims,Matomtypes = read_charge_style_data(f)
 
     # 计算box边长
     dim_edges = []
@@ -81,6 +136,7 @@ def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxy
         posi_types[i] = type_i_posi
 
     ABCDE = string.ascii_uppercase
+
     if withxyz:
         New = '/tmp/xxxx.xyz'
         N = open(New, 'w')
@@ -101,7 +157,10 @@ def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxy
             stri = ' '.join([str(i) for i in list(range(indices, indices + len(type_i_posi)))])
             indices += len(type_i_posi)
             # u.select_atoms('index '+stri).chainID=[ABCDE[i]]*len(u.select_atoms('index '+stri))
-            u.select_atoms('index ' + stri).chainIDs = ABCDE[type_i]
+            if len(type_i_posi) > 0:
+                u.select_atoms('index ' + stri).chainIDs = ABCDE[type_i]
+            else:
+                print('warning! current atom type defined in the head of lmp file is not in the system:',type_i)
 
     else:
         print('write with pdb')
@@ -127,8 +186,7 @@ def readlammpsdata(inputdata='lmp.S5.0--1_EM+Annealling.lmp', Mname=None, withxy
                         "   {pos[0]:8.3f}{pos[1]:8.3f}{pos[2]:8.3f}{occupancy:6.2f}"
                         "{tempFactor:6.2f}      {segID:<4s}{element:>2s}{charge:2s}\n"),
                     'REMARK': "REMARK     {0}\n",
-                    'CONECT': "CONECT{0}\n"
-                }
+                    'CONECT': "CONECT{0}\n"}
 
                 vals = {'serial': indices + idx + 1, 'name': str(Mname[type_i]), 'chainID': str(ABCDE[type_i]),
                         'pos': [float(p) for p in pos[1:]], 'charge': '0', 'altLoc': ' ', 'resName': 'UNK',
