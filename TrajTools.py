@@ -1,6 +1,4 @@
-import string
-import uuid
-
+import dpdata
 import MDAnalysis as mda
 import nglview as nv
 import numpy as np
@@ -8,33 +6,38 @@ from MDAnalysis import transformations as trans
 from MDAnalysis.analysis import distances
 from MDAnalysis.analysis.base import AnalysisFromFunction
 from MDAnalysis.coordinates.memory import MemoryReader
-from natsort import natsorted
+#from natsort import natsorted
 
 
 # class A_TrajTools:
 def addpresentation(vw, style=None, colors=None, radius_s=None):
     '''
     :param vw: nglview view
-    :param style: 'ball+stick' 'ball' ...
+    :param style: 'ball+stick' 'spacefill' ...
     :param colors: color of each atoms group
     :param radius_s: radius of each atoms group
     :return:
     '''
     vw.clear()
     vw.clear_representations()
-    atom_selections = ''
     if not style:
         style = 'ball+stick'
+        vw.add_representation(style, colorScheme='element', radiusType='size', multibond='symmetric')
+    else:
+        vw.add_representation(style, colorScheme='element', radiusType='size')
     if not colors:
-        colors = ['silver','red','black','green','white','pink']
-        chainIDs = [':A',':B',':C',':D',':E',':F']
+        colors = ['silver', 'red', 'black', 'green', 'white', 'pink']
+        chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
+        repr_type = ['spacefill']*len(chainIDs)
+    else:
+        chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
         repr_type = ['spacefill']*len(chainIDs)
     if not radius_s:
-        radius_s=['0.8','0.8','0.8','0.8','0.6','0.8']
+        radius_s = ['0.8', '0.8', '0.8', '0.8', '0.6', '0.8']
 
-    vw.add_representation(style, colorScheme='element', radiusType='size', multibond='symmetric')
+
     for i in range(len(chainIDs)):
-        vw.add_representation(repr_type[i], selection=chainIDs[i] + atom_selections, color=colors[i],
+        vw.add_representation(repr_type[i], selection=chainIDs[i], color=colors[i],
                               radius=radius_s[i])  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
     vw.player.parameters = dict(delay=0.004, step=-1)
     # vw.background = 'black'
@@ -104,6 +107,99 @@ def importtrj(topo, trj, elements, dt=0, chainIDs=None, topo_format='DATA', in_m
                          in_memory_step=in_memory_step, **arggs)
     else:
         u = None
+    import string
+    ABCDE = string.ascii_uppercase
+    if chainIDs:
+        # 如果指定了chainid 则使用自定义的chainid
+        ABCDE = chainIDs
+    u.add_TopologyAttr('resname', [''] * len(u.segments.residues))
+    u.add_TopologyAttr('names', range(len(u.atoms)))
+    u.add_TopologyAttr('chainID')
+    for i in range(len(atom_types)):
+        u.select_atoms('type  ' + str(i + 1)).names = [atom_types[i]] * len(u.select_atoms('type  ' + str(i + 1)))
+        u.select_atoms('type  ' + str(i + 1)).chainIDs = ABCDE[i]
+
+    if info:
+        print(u.kwargs)
+        print(len(u.trajectory), ' frames')
+        print(u.trajectory.dt, ' dt (ps) for two frames')
+    return u
+
+def importtrj2(trj, elements, dt=0, chainIDs=None, topo_format='DATA', topo=False, in_memory=True,
+              in_memory_step=100,
+              info=False):
+    # also can use ############
+    # u.transfer_to_memory(step=10)
+    atom_types = elements
+    # get atom type and mass
+    # with open(lammpsdata,'r') as lmpreader:
+    #     #dump al1 all custom 100 lammpstrj.${name}.lammpstrj  id type x y z q xu yu zu vx vy vz proc element
+    #     lmpreader = lmpreader.readlines()
+    # atom_masses = {}
+    # for line_lmp in lmpreader:
+    #     line_lmp_l = line_lmp.split()
+    #     if len(line_lmp_l) == 2 and line_lmp_l[0].isnumeric():
+    #         try:
+    #             type(float(line_lmp_l[-1]))## 如果不可以被float 说明不是mass数据所在行!
+    #             atom_masses[int(line_lmp_l[0])] = float(line_lmp_l[1])
+    #         except:
+    #             yyy=1
+    #     atom_types = len(atom_masses)
+    ## 多个trj文件
+    if isinstance(trj, list):
+        if 'lammpstrj' in trj[0]:
+            trj_format = 'LAMMPSDUMP'
+            # print('lammpstrj file detected')
+        elif '.dcd' in trj[0]:
+            trj_format = 'LAMMPS'
+            # print('dcd file detected')
+        else:
+            trj_format = 'LAMMPSDUMP'
+            print('file type not reconized, load as lammpstrj file')
+    ## 单个trj文件
+    else:
+        if 'lammpstrj' in trj:
+            trj_format = 'LAMMPSDUMP'
+            # print('lammpstrj file detected')
+        elif '.dcd' in trj:
+            trj_format = 'LAMMPS'
+            # print('dcd file detected')
+        else:
+            trj_format = 'LAMMPSDUMP'
+            print('file type not reconized, load as lammpstrj file')
+
+    # lammpstrj不需topo文件,dcd则需要
+    if trj_format == 'LAMMPSDUMP':
+        tmplmp='/tmp/conf1.lmp'
+        data = dpdata.System(trj,fmt='lammps/dump',type_map=atom_types)
+        data[0].to('lammps/lmp',tmplmp)
+        topo=tmplmp
+    elif trj_format == 'LAMMPS': # dcd
+        if not topo:
+            print('a topo file is needed for lammps dump (DCD format): lmp/pdb/...')
+
+    a_lengthunit = "A"
+    a_timeunit = "fs"
+    a_atom_style = 'id type charge x y z'  # Only when use data as topo format. Required fields: id, resid, x, y, z  Optional fields: resid, charge
+
+    if dt != 0:
+        if info:
+            print('Using self_defined dt (time between two frame in dump file)!!!!! Disable by setting dt = 0')
+        arggs = {'dt': dt / 1000}
+    else:
+        arggs = {}
+    if topo_format == 'DATA':
+        u = mda.Universe(topo, trj, topology_format=topo_format, format=trj_format,
+                         atom_style=a_atom_style,
+                         lengthunit=a_lengthunit, timeunit=a_timeunit, in_memory=in_memory,
+                         in_memory_step=in_memory_step, **arggs)
+    elif topo_format != 'DATA':
+        u = mda.Universe(topo, trj, topology_format=topo_format, format=trj_format,
+                         lengthunit=a_lengthunit, timeunit=a_timeunit, in_memory=in_memory,
+                         in_memory_step=in_memory_step, **arggs)
+    else:
+        u = None
+    import string
     ABCDE = string.ascii_uppercase
     if chainIDs:
         # 如果指定了chainid 则使用自定义的chainid
@@ -265,6 +361,7 @@ def cut_a_singleframe(u, frame, info=False, format=None):
     :param info: bool
     :return: path of a tmp dcd
     """
+    import uuid
     if format is None:
         format = 'dcd'
     try:
@@ -353,6 +450,18 @@ def recenter_singleframe(singleframe, info=False):
         print('Done! center_of_mass', recentered_frame.select_atoms('all').center_of_mass())
     return recentered_frame
 
+def recenter_universe(u,center='mass', in_memory = False):
+    writer = mda.Writer("/tmp/output.xyz", n_atoms=u.atoms.n_atoms)
+    for ts in u.trajectory:
+        if center == 'mass':
+            u.atoms.positions += -u.atoms.center_of_mass()
+        else:
+            print('using geo center')
+            u.atoms.positions += -u.atoms.center_of_geometry()
+        writer.write(u)
+    writer.close()
+    newu=mda.Universe('/tmp/output.xyz',in_memory=in_memory)
+    return newu
 
 def fabricate_u_from_atom_index(u, atomindex, info=False):
     # atoms=mda.Universe.empty(0, 0, atom_resindex=[], trajectory=True).select_atoms('all')
@@ -395,7 +504,7 @@ def cross_cut(u, cut='xyz0', info=False, selection=False):
         [cx, cy, cz] = centerids[1]
     except:
         print('Center of mass not detected, is the system even contains any atom?')
-        [cx, cy, cz]=[0,0,0]
+        [cx, cy, cz] = [0, 0, 0]
     index = []
     atoms = sys
     # x
@@ -563,6 +672,21 @@ def rewrite_lammpsdump(lammpsdata, lammpsdump):
                 else:
                     newline = ' '.join(line.split()) + '\n'
                 dumpwriter.write(newline)
+
+
+def gen_pyscal_sys(u, frame=0, selection='all'):
+    import pyscal.core as pc
+    u.trajectory[frame]
+    atmgroup = u.select_atoms(selection)
+    # set pc system and box size
+    sys = pc.System()
+    sys.box = [[u.dimensions[0], 0.0, 0.0], [0.0, u.dimensions[1], 0.0], [0.0, 0.0, u.dimensions[2]]]
+    # Generate atomlist,and combine it to system
+    atomlist = []
+    for i, atomindice in enumerate(list(atmgroup.indices)):
+        atomlist.append(pc.Atom(pos=atmgroup.atoms[i].position.tolist(), id=atomindice))
+    sys.atoms = atomlist
+    return sys
 
 
 def vw(u):
