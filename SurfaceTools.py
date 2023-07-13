@@ -7,7 +7,7 @@ import plotly.graph_objs as go
 import pyvista as pv
 import tqdm
 from scipy.spatial import distance
-
+from sklearn.cluster import KMeans
 from LazzyMDkit.PlotCustomizer import *
 
 pv.set_jupyter_backend('pythreejs')
@@ -23,14 +23,14 @@ class SurfaceTools:
         return positions
 
     def test_alpha_outlier_removal(self, positions, frame=0, nb_points=20, radius=10, info=False):
-        '''
+        """
         :param positions:
         :param frame:
         :param nb_points: pcd.remove_radius_outlier which lets you pick the minimum amount of points that the sphere should contain.
         :param radius: pcd.remove_radius_outlier  which defines the radius of the sphere that will be used for counting the neighbors.
         :param info:
         :return:
-        '''
+        """
         areas = []
         volumes = []
         alphas = range(120)[::1]
@@ -85,14 +85,14 @@ class SurfaceTools:
         fig.show()
 
     def test_nb_points_radius_outlier_removal(self, positions, frame=0, alpha=75, info=False):
-        '''
+        """
         上方地带dou'sh
         :param positions:
         :param frame:
         :param alpha: o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape A smaller alpha value will result in a more detailed and complex shape, while a larger alpha value will result in a simpler shape with fewer edges and vertices.
         :param info:
         :return:
-        '''
+        """
         areas = []
         volumes = []
         radius_s = range(20)[1::1]
@@ -191,8 +191,8 @@ class SurfaceTools:
             # voxel_down_pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
 
             #         ##### Ball pivoting (surface reconstruction method)
-            #         distances = pcd1.compute_nearest_neighbor_distance()
-            #         avg_dist = np.mean(distances)
+            #         distancess = pcd1.compute_nearest_neighbor_distance()
+            #         avg_dist = np.mean(distancess)
             #         radius = 3 * avg_dist
             #         radii = [radius, radius * 2, radius * 4, radius * 8]
 
@@ -336,23 +336,27 @@ class SurfaceTools:
         v = nv.show_file(mda.Universe('/tmp/1.xyz'))
         return v
 
-    def indicing_shell_atoms(self, atomgroup, shell_ranges=None, alpha=75, nb_points=20, radius=19, debug=False):
-        '''
+    def indicing_shell_atoms(self, atomgroup, shell_ranges=None, alpha=75, nb_points=20, radius=19, debug=False,
+                             frame=None, threshold=None):
+        """
+        :param threshold: max distance difference to determine if there is multisurface in detected surface points
         :param atomgroup:
         :param shell_ranges:[[0, 3], [1, 3], [3, 5]]
         :param alpha: o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape A smaller alpha value will result in a more detailed and complex shape, while a larger alpha value will result in a simpler shape with fewer edges and vertices.
         :param nb_points: pcd.remove_radius_outlier which lets you pick the minimum amount of points that the sphere should contain.
         :param radius: pcd.remove_radius_outlier  which defines the radius of the sphere that will be used for counting the neighbors.
         :return:
-        '''
+        """
         # ################## 使用alpha shhape 找到表面锚点，并标记
         if shell_ranges is None:
+            print('using default shell_ranges = [[0, 3], [1, 3], [3, 5]]')
             shell_ranges = [[0, 3], [1, 3], [3, 5]]
         atoms = atomgroup
 
         points_pos = atoms.positions
         indices_all = atoms.indices
         positions = [points_pos, ]
+        masscenter = atoms.center_of_mass()
         if debug:
             print('Start meshing')
         labeled_surface_points, mesh_s = self.surface_mesh_s(positions, alpha, nb_points, radius)
@@ -365,27 +369,65 @@ class SurfaceTools:
             print(f'标记的表面锚点数目:{len(labeled_surface_points[0])},表面锚点mesh覆盖区域:{mesh_area_s}')
 
         # ################### 依据标记的锚点，找到距其一定范围内的点
-        surface_points = np.asarray(labeled_surface_points[0])  # 表面锚点
+        surface_points = np.asarray(labeled_surface_points[0])  # 表面锚点坐标
+        # 以最外层厚度的1/2作为阈值
+        if not threshold:
+            # threshold = (shell_ranges[0][0] - shell_ranges[0][1]) / 2
+            threshold = shell_ranges[0][0] - shell_ranges[0][1]
+        # 防止出现多个surface的情况: 如ANP空腔的表面
+        def refine_surface_points(surface_points, masscenter, threshold):
+            # 注意，以下代码只针对两个surface做了处理
+            # Calculate the distances
+            distances = np.linalg.norm(surface_points - masscenter, axis=1)
+            # Define the number of clusters
+            k = 2
+            # Create a k-means object
+            kmeans = KMeans(n_clusters=k)
+            # Fit the data
+            kmeans.fit(distances.reshape(-1, 1))
+            # Get the cluster labels
+            labels = kmeans.labels_
+            # 将surface points分为两类, 如果两类原子的平均径向距离相差较大，说明识别到了多个表面
+            # Find the cluster label that has the most occurrences
+            largest_cluster = np.bincount(labels).argmax()
+            smallest_cluster = np.bincount(labels).argmin()
+            largest_distances_points = distances[labels == largest_cluster]
+            smallest_distances_points = distances[labels == smallest_cluster]
+            MultiSurface = False
+            if largest_distances_points.mean() - smallest_distances_points.mean() > threshold:
+                MultiSurface = True
+                print(f'Warning! Multiple surfaces were detected, current threshold {threshold}, refining the surface_points...')
+                surface_points_refined = surface_points[labels == largest_cluster]
+                if frame:
+                    print(f'frame {frame}, from {surface_points.shape} to {surface_points_refined.shape}')
+                else:
+                    print(f'from {surface_points.shape} to {surface_points_refined.shape}')
+            else:
+                surface_points_refined = surface_points
+            return surface_points_refined, MultiSurface
+
+        surface_points, MultiSurface = refine_surface_points(surface_points, masscenter, threshold)
 
         # Compute the distances between each point in the cloud and the shell points
-        distances = distance.cdist(surface_points, points_pos)
+        distancess = distance.cdist(surface_points, points_pos)
 
         # Find the minimum distance for each point
-        min_distances = np.min(distances, axis=0) ## 每个点与离他最近的锚点的距离
+        min_distances = np.min(distancess, axis=0)  # 每个点与离他最近的锚点的距离
 
         # Label all points within the shell with the shell thickness of 5
         # points_within_shell = np.where(shell_thickness_range_min <= min_distances <= shell_thickness_range_max, True, False)
-        indice_shell_s=[]
-        surfaceAtomSearched=False
-        for ii,shell_range in enumerate(shell_ranges):
-            shell_thickness_range_min,shell_thickness_range_max=shell_range
-            points_within_shell = np.logical_and(min_distances >= shell_thickness_range_min, min_distances <= shell_thickness_range_max)
+        indice_shell_s = []
+        surfaceAtomSearched = False
+        for ii, shell_range in enumerate(shell_ranges):
+            shell_thickness_range_min, shell_thickness_range_max = shell_range
+            points_within_shell = np.logical_and(min_distances >= shell_thickness_range_min,
+                                                 min_distances <= shell_thickness_range_max)
 
             labeled_shell_points = []
             for i, x in enumerate(points_within_shell):
                 if x:
                     labeled_shell_points.append(points_pos[i])
-            labeled_shell_points = np.asarray(labeled_shell_points) # positions
+            labeled_shell_points = np.asarray(labeled_shell_points)  # positions
 
             # ########### 匹配到mdanalysis Universe对象中的坐标，
             def match_atom_indices(s_points):
@@ -411,7 +453,6 @@ class SurfaceTools:
                                 if abs(z - z1) <= delta_limit:
                                     idx_s.append(idx)
 
-
                 if len(s_points) == len(idx_s):
                     if debug:
                         print(f'共遍历原子{len(points_pos)}个，匹配到{len(idx_s)}个原子')
@@ -421,7 +462,7 @@ class SurfaceTools:
                 return idx_s
 
             # ############# 找到对应的真实indice
-            if not surfaceAtomSearched: # 只搜索一次锚点原子
+            if not surfaceAtomSearched:  # 只搜索一次锚点原子
                 if debug:
                     print('# 匹配 表面锚点原子 indices...')
                 idx_surface = match_atom_indices(surface_points)
@@ -429,7 +470,7 @@ class SurfaceTools:
                 for idx, indice in enumerate(indices_all):
                     if idx in idx_surface:
                         indice_surface.append(indice)
-            surfaceAtomSearched=True
+            surfaceAtomSearched = True
 
             indice_shell = []
             if debug:
@@ -440,4 +481,4 @@ class SurfaceTools:
                     indice_shell.append(indice)
 
             indice_shell_s.append(indice_shell)
-        return indice_surface, indice_shell_s
+        return indice_surface, indice_shell_s, MultiSurface
