@@ -373,7 +373,7 @@ class SurfaceTools:
         # 以最外层厚度的1/2作为阈值
         if not threshold:
             # threshold = (shell_ranges[0][0] - shell_ranges[0][1]) / 2
-            threshold = shell_ranges[0][0] - shell_ranges[0][1]
+            threshold = shell_ranges[0][1] - shell_ranges[0][0]
         # 防止出现多个surface的情况: 如ANP空腔的表面
         def refine_surface_points(surface_points, masscenter, threshold):
             # 注意，以下代码只针对两个surface做了处理

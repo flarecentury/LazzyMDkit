@@ -1,4 +1,5 @@
 import dpdata
+import uuid
 import MDAnalysis as mda
 import nglview as nv
 import numpy as np
@@ -48,6 +49,8 @@ def addpresentation(vw, style=None, colors=None, radius_s=None):
 def importtrj(topo, trj, elements, dt=0, chainIDs=None, topo_format='DATA', in_memory=True,
               in_memory_step=100,
               info=False):
+    # if not in_memory:
+    #     print('you are suggested to set in_memory=True, otherwise exception error may occur')
     # also can use ############
     # u.transfer_to_memory(step=10)
     atom_types = elements
@@ -128,6 +131,8 @@ def importtrj(topo, trj, elements, dt=0, chainIDs=None, topo_format='DATA', in_m
 def importtrj2(trj, elements, dt=0, chainIDs=None, topo_format='DATA', topo=False, in_memory=True,
               in_memory_step=100,
               info=False):
+    # if not in_memory:
+    #     print('you are suggested to set in_memory=True, otherwise exception error may occur')
     # also can use ############
     # u.transfer_to_memory(step=10)
     atom_types = elements
@@ -153,6 +158,9 @@ def importtrj2(trj, elements, dt=0, chainIDs=None, topo_format='DATA', topo=Fals
         elif '.dcd' in trj[0]:
             trj_format = 'LAMMPS'
             # print('dcd file detected')
+        elif '.pdb' in trj[0]:
+            trj_format = 'PDB'
+            # print('dcd file detected')
         else:
             trj_format = 'LAMMPSDUMP'
             print('file type not reconized, load as lammpstrj file')
@@ -163,6 +171,9 @@ def importtrj2(trj, elements, dt=0, chainIDs=None, topo_format='DATA', topo=Fals
             # print('lammpstrj file detected')
         elif '.dcd' in trj:
             trj_format = 'LAMMPS'
+            # print('dcd file detected')
+        elif '.pdb' in trj:
+            trj_format = 'PDB'
             # print('dcd file detected')
         else:
             trj_format = 'LAMMPSDUMP'
@@ -361,44 +372,40 @@ def cut_a_singleframe(u, frame, info=False, format=None):
     :param info: bool
     :return: path of a tmp dcd
     """
-    import uuid
     if format is None:
         format = 'dcd'
-    try:
-        if info:
-            print('using universe as input')
-        totalframe = len(u.trajectory)
-        system = u.select_atoms('all')
-        system.universe.trajectory[frame]
-    except:
-        if info:
-            print('using atom group as input')
-        totalframe = len(u.universe.trajectory)
-        system = u.select_atoms('all')
-        system.universe.trajectory[frame]
-    currentframe = system.universe.trajectory.frame
+
     if info:
+        try:
+            print('using atom group as input')
+            totalframe = len(u.universe.trajectory)
+        except:
+            print('using universe as input')
+            totalframe = len(u.trajectory)
+        currentframe = frame
         print('totalframe:', totalframe)
         print('selectedframe:', currentframe)
-    uuidNAME = str(uuid.uuid4())
+
+    tempfile = '/tmp/Cutframe-' + str(uuid.uuid4())
     if format == 'dcd':
-        tempfile = '/tmp/Cutframe-' + uuidNAME + '.dcd'
         if info:
-            print('Using dcd as output!topo file are needed')
-        # tempDCDfile = '/tmp/Cutframe-'+str(frame)+'.dcd'
-        system.write(tempfile)
+            print('Using dcd as output!topo file are needed when reading it')
+        tempfile = tempfile + '.dcd'
     elif format == 'xyz':
-        tempfile = '/tmp/Cutframe-' + uuidNAME + '.xyz'
-        system.write(tempfile)
+        tempfile = tempfile + '.xyz'
     elif format == 'gro':
-        tempfile = '/tmp/Cutframe-' + uuidNAME + '.gro'
-        system.write(tempfile)
+        tempfile = tempfile + '.gro'
     elif format == 'pdb':
-        tempfile = '/tmp/Cutframe-' + uuidNAME + '.pdb'
-        system.write(tempfile)
+        tempfile = tempfile + '.pdb'
     else:
-        print('error!')
-        tempfile = 'error'
+        print('error!dcd/xyz/gro/pdb')
+        tempfile = tempfile + 'error'
+
+
+    u.universe.trajectory[frame]
+    system = u.select_atoms('all')
+    system.write(tempfile)
+    # print(tempfile)
     return tempfile
 
 
