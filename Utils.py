@@ -13,6 +13,21 @@ import numpy as np
 import pybase64
 import tqdm
 
+def pygrep(file, grep):
+    with open(file,'r') as a:
+        ls=a.readlines()
+        filtered=[]
+        for l in ls:
+            if grep in l:
+                filtered.append(l)
+        print(''.join(filtered))
+
+
+def pycat(file):
+    with open(file,'r') as a:
+        ls=a.read()
+        print(ls)
+
 
 def parallel_runs(func, data_lists, nproc=None):
     with futures.ProcessPoolExecutor(max_workers=nproc) as executor:
