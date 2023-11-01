@@ -3,6 +3,7 @@ import uuid
 import MDAnalysis as mda
 import nglview as nv
 import numpy as np
+import itertools
 from MDAnalysis import transformations as trans
 from MDAnalysis.analysis import distances
 from MDAnalysis.analysis.base import AnalysisFromFunction
@@ -11,40 +12,125 @@ from MDAnalysis.coordinates.memory import MemoryReader
 
 
 # class A_TrajTools:
-def addpresentation(vw, style=None, colors=None, radius_s=None):
-    '''
-    :param vw: nglview view
-    :param style: 'ball+stick' 'spacefill' ...
-    :param colors: color of each atoms group
-    :param radius_s: radius of each atoms group
-    :return:
-    '''
+# def addpresentation(vw, style=None, colors=None, radius_s=None):
+#     '''
+#     :param vw: nglview view
+#     :param style: 'ball+stick' 'spacefill' ...
+#     :param colors: color of each atoms group
+#     :param radius_s: radius of each atoms group
+#     :return:
+#     '''
+#     vw.clear()
+#     vw.clear_representations()
+#     if not style:
+#         style = 'ball+stick'
+#         vw.add_representation(style, colorScheme='element', radiusType='size', multibond='symmetric')
+#     else:
+#         vw.add_representation(style, colorScheme='element', radiusType='size')
+#     if not colors:
+#         colors = ['silver', 'red', 'black', 'green', 'white', 'pink']
+#         chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
+#         repr_type = ['spacefill']*len(chainIDs)
+#     else:
+#         chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
+#         repr_type = ['spacefill']*len(chainIDs)
+#     if not radius_s:
+#         radius_s = ['0.8', '0.8', '0.8', '0.8', '0.6', '0.8']
+#
+#
+#     for i in range(len(chainIDs)):
+#         vw.add_representation(repr_type[i], selection=chainIDs[i], color=colors[i],
+#                               radius=radius_s[i])  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+#     vw.player.parameters = dict(delay=0.004, step=-1)
+#     # vw.background = 'black'
+#
+#     return vw
+
+def addpresentation(vw, bond=False, colors=None, radius_s=None, chainIDs=None):
     vw.clear()
     vw.clear_representations()
-    if not style:
-        style = 'ball+stick'
+
+    if bond:
+        style == 'ball+stick'
         vw.add_representation(style, colorScheme='element', radiusType='size', multibond='symmetric')
-    else:
-        vw.add_representation(style, colorScheme='element', radiusType='size')
-    if not colors:
-        colors = ['silver', 'red', 'black', 'green', 'white', 'pink']
-        chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
-        repr_type = ['spacefill']*len(chainIDs)
-    else:
-        chainIDs = [':A',':B',':C',':D',':E',':F'][:len(colors)]
-        repr_type = ['spacefill']*len(chainIDs)
-    if not radius_s:
-        radius_s = ['0.8', '0.8', '0.8', '0.8', '0.6', '0.8']
 
+    distinct_color_names = [
+        'red', 'green', 'yellow', 'blue', 'orange',
+        'purple', 'cyan', 'magenta', 'lime', 'pink',
+        'teal', 'lavender', 'brown', 'beige', 'maroon',
+        'mint', 'olive', 'coral', 'navy', 'grey'
+    ]
+    default_colors = itertools.cycle(distinct_color_names)
+    default_radius_s = itertools.cycle(['0.8', '0.8', '0.8', '0.8', '0.8', '0.8'])
+    default_chainIDs = itertools.cycle([f'{chr(i)}' for i in range(65, 91)])  # 'A', 'B', 'C', ... 'Z'
 
-    for i in range(len(chainIDs)):
-        vw.add_representation(repr_type[i], selection=chainIDs[i], color=colors[i],
-                              radius=radius_s[i])  # atom name: .CA, .C, .N  element name: _H, _C, _O, chain name: :A
+    # Determine the number of iterations based on the length of chainIDs
+    num_iterations = len(chainIDs) if chainIDs else len(colors) if colors else 20  # Default to 6 iterations
+
+    colors = list(itertools.islice(itertools.cycle(colors) if colors else default_colors, num_iterations))
+    radius_s = list(itertools.islice(itertools.cycle(radius_s) if radius_s else default_radius_s, num_iterations))
+    chainIDs = list(itertools.islice(itertools.cycle(chainIDs) if chainIDs else default_chainIDs, num_iterations))
+
+    for color, radius, chainID in zip(colors, radius_s, chainIDs):
+        vw.add_representation('spacefill', selection=":"+chainID, color=color, radius=radius)
+
     vw.player.parameters = dict(delay=0.004, step=-1)
-    # vw.background = 'black'
-
     return vw
 
+def universe_replicas(u, replicas=1, positive=True, negative=True, replicate_x=True, replicate_y=True, replicate_z=True):
+    # Define the number of frames in the original trajectory
+    num_frames = len(u.trajectory)
+
+    # Define the dimensions of the original box
+    original_dimensions = u.dimensions[:3]
+
+    # Determine the shift ranges for each axis
+    shift_range_x = list(range(-replicas, replicas + 1)) if replicate_x else [0]
+    shift_range_y = list(range(-replicas, replicas + 1)) if replicate_y else [0]
+    shift_range_z = list(range(-replicas, replicas + 1)) if replicate_z else [0]
+
+    # Adjust the shift ranges based on the positive and negative parameters
+    if not positive:
+        shift_range_x = [x for x in shift_range_x if x >= 0]
+        shift_range_y = [y for y in shift_range_y if y >= 0]
+        shift_range_z = [z for z in shift_range_z if z >= 0]
+
+    if not negative:
+        shift_range_x = [x for x in shift_range_x if x <= 0]
+        shift_range_y = [y for y in shift_range_y if y <= 0]
+        shift_range_z = [z for z in shift_range_z if z <= 0]
+
+    # Generate shift values based on the shift ranges
+    shift_values = [
+        np.array([i, j, k]) * original_dimensions
+        for i, j, k in itertools.product(shift_range_x, shift_range_y, shift_range_z)
+    ]
+
+    # Determine the total number of replicas
+    total_replicas = len(shift_values)
+
+    # Prepare arrays to hold the new coordinates and dimensions
+    all_coordinates = np.empty((num_frames, len(u.atoms) * total_replicas, 3))
+    new_dimensions = np.empty((num_frames, 6))
+    new_dimensions[:, :3] = original_dimensions * np.array([len(shift_range_x), len(shift_range_y), len(shift_range_z)])
+    new_dimensions[:, 3:] = u.dimensions[3:]  # Keep the original box angles
+
+    # Iterate through each frame of the original trajectory
+    for frame_index, ts in enumerate(u.trajectory):
+        # Create replicas of the coordinates shifted along each dimension
+        replicas = [u.atoms.positions + shift for shift in shift_values]
+        # Concatenate the original and replicated coordinates for this frame
+        all_coordinates[frame_index] = np.concatenate(replicas, axis=0)
+
+    # Create a new Universe with the concatenated coordinates
+    new_u = mda.Merge(*[u.atoms] * total_replicas)  # Repeat u.atoms total_replicas times
+    new_u.load_new(all_coordinates, format=mda.coordinates.memory.MemoryReader)
+
+    # Update the dimensions of the new Universe
+    for ts in new_u.trajectory:
+        ts.dimensions = new_dimensions[frame_index]
+
+    return new_u
 
 def importtrj(topo, trj, elements, dt=0, chainIDs=None, topo_format='DATA', in_memory=True,
               in_memory_step=100,

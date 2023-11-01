@@ -11,11 +11,10 @@ def get_x_data_per_atom_type(df_s, elements, dfcolumn=None):
         dfcolumn = ['id', 'c_peratom[1]', 'c_peratom[2]', 'c_peratom[3]', 'c_peratom[4]', 'c_peratom[5]',
                     'c_peratom[6]']
     x_s_all = []
-    atom_types = len(elements)
     # get charge / velocity /....
     for df in df_s:
         x_s = []
-        for i in range(atom_types):
+        for i in range(len(elements)):
             try:
                 x_i = df.loc[df['type'].astype(float) == i + 1][dfcolumn].astype(float)
             except:
@@ -56,8 +55,7 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
     # lammps里面的应力是能量的量纲，但是不是一个标量，也是有方向性的，其实就是对应各个应力分量，应力的量纲是能量
     """
 
-    calPrincipal_stress = calPrincipal_stress  # 六个stree的张量，只有x y z 方向的数值较大，因此可以忽略掉另外3个数值，默认忽略，节省算力
-
+    # 六个stree的张量，只有x y z 方向的数值较大，因此可以忽略掉另外3个数值，默认忽略，节省算力
     if not calPrincipal_stress:
         print('简化stress计算')
     molar_volumes = {'Al': 10.00, 'O': 17.36, 'C': 5.29, 'H': 11.42}  # 10-6 m3/mol
@@ -72,35 +70,70 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
             atom_volumes_in_angstrom.update({keys[i]: volumes_angstrom[i]})
         return atom_volumes_in_angstrom
 
+    # def radial_stress(centre_id, pos_atom_i, stress_atom_i, debug=False):
+    #     # 注意，这里是根据输入的xx yy zz 方向应力和质心 计算xx yy zz三个方向的径向应力的合力
+    #     x0, y0, z0 = centre_id  # centre of mass
+    #     x1, y1, z1 = pos_atom_i  # pos_atom_i
+    #     v_x, v_y, v_z = stress_atom_i  # stresses
+    #     dist = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+    #     # 相对质心的位置
+    #     L_yz = abs(x1 - x0)
+    #     L_xz = abs(y1 - y0)
+    #     L_xy = abs(z1 - z0)
+    #     # cos夹角
+    #     cos_yz = L_yz / dist
+    #     cos_xz = L_xz / dist
+    #     cos_xy = L_xy / dist
+    #     # xyz  方向主应力在径向的分量
+    #     v_x_radial = v_x * cos_yz
+    #     v_y_radial = v_y * cos_xz
+    #     v_z_radial = v_z * cos_xy
+    #     # print(cos_yz,cos_xz,cos_xy)
+    #     # 径向力
+    #     v_radial = v_x_radial + v_y_radial + v_z_radial
+    #     # print('cos_yz,cos_xz,cos_xy',cos_yz,cos_xz,cos_xy)
+    #     if debug:
+    #         print('centre_id', centre_id)
+    #         print('pos_atom_i',pos_atom_i)
+    #         print('stress_atom_i',stress_atom_i)
+    #         print('x1,y1,z1', x1, y1, z1)
+    #         print('L_yz,L_xz,L_xy,dist', L_yz, L_xz, L_xy, dist)
+    #         print('cos_yz,cos_xz,cos_xy', cos_yz, cos_xz, cos_xy)
+    #         print('v_x_radial,v_y_radial,v_z_radial', v_x_radial, v_y_radial, v_z_radial)
+    #     return v_radial
+
     def radial_stress(centre_id, pos_atom_i, stress_atom_i, debug=False):
-        # 注意，这里是根据输入的xx yy zz 方向应力和质心 计算xx yy zz三个方向的径向应力的合力
-        x0, y0, z0 = centre_id  # centre of mass
-        x1, y1, z1 = pos_atom_i  # pos_atom_i
-        v_x, v_y, v_z = stress_atom_i  # stresses
+        # 获取质心坐标和原子坐标
+        x0, y0, z0 = centre_id
+        x1, y1, z1 = pos_atom_i
+        v_x, v_y, v_z = stress_atom_i
+
+        # 计算原子与质心之间的距离
         dist = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
-        # 相对质心的位置
-        L_yz = abs(x1 - x0)
-        L_xz = abs(y1 - y0)
-        L_xy = abs(z1 - z0)
-        # cos夹角
-        cos_yz = L_yz / dist
-        cos_xz = L_xz / dist
-        cos_xy = L_xy / dist
-        # xyz  方向主应力在径向的分量
+
+        # 计算cos夹角
+        cos_yz = (x1 - x0) / dist
+        cos_xz = (y1 - y0) / dist
+        cos_xy = (z1 - z0) / dist
+
+        # 计算应力在三个方向上的径向分量
         v_x_radial = v_x * cos_yz
         v_y_radial = v_y * cos_xz
         v_z_radial = v_z * cos_xy
-        # print(cos_yz,cos_xz,cos_xy)
-        # 径向力
+
+        # 计算总的径向应力
         v_radial = v_x_radial + v_y_radial + v_z_radial
-        # print('cos_yz,cos_xz,cos_xy',cos_yz,cos_xz,cos_xy)
+
         if debug:
             print('centre_id', centre_id)
+            print('pos_atom_i',pos_atom_i)
+            print('stress_atom_i',stress_atom_i)
             print('x1,y1,z1', x1, y1, z1)
-            print('L_yz,L_xz,L_xy,dist', L_yz, L_xz, L_xy, dist)
+            print('dist', dist)
             print('cos_yz,cos_xz,cos_xy', cos_yz, cos_xz, cos_xy)
             print('v_x_radial,v_y_radial,v_z_radial', v_x_radial, v_y_radial, v_z_radial)
         return v_radial
+
 
     atom_volumes_angstrom = convert_to_atom_volumes(molar_volumes)
     # get atom volume from above dict according to the elements
@@ -114,15 +147,16 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
     stress_s_all = []
 
     for frame in tqdm.tqdm(range(len(p_s_all))):
-        # count += 1
         centreid = centreid_s[frame]
         radial_stress_s = []
+        # print('frame:',frame)
         for index in range(len(elements)):
             atom_volumes_i = atom_volumes_s[index]
             ids = p_s_all[frame][index]['id']
             datalist = p_s_all[frame][index][
                 ['id', 'type', 'x', 'y', 'z', 'c_peratom[1]', 'c_peratom[2]', 'c_peratom[3]', 'c_peratom[4]',
                  'c_peratom[5]', 'c_peratom[6]', ]].values.tolist()
+            # step 1 calPrincipal_stress
             principal_stress_s_type_i = []
             principal_stress_x_type_i = []
             principal_stress_y_type_i = []
@@ -130,7 +164,6 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
             pos_s = []
             for data in datalist:  # cal stress row by row
                 atomid, atomtype, posi_x, posi_y, posi_z, a, b, c, d, e, f = [float(k) for k in data]
-
                 if calPrincipal_stress:
                     # 注意，这里计算得到的时主应力，但主应力的方向并非是xyz坐标轴方向，而radial_stress函数未考虑此问题，因此，需要考虑主方向，以正确计算径向应力
                     # cal principal_stress ######################
@@ -138,23 +171,20 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
                     principal_stress_per_atom_type_i = [float(i) for i in [str(i).split('.')[0] for i in
                                                                            list(sigma.eigenvals().keys())]]  # 计算主应力
                     principal_stress_s_type_i.append(principal_stress_per_atom_type_i)
-
                 else:
                     # dont cal principal_stress, use pxx yy zz as input for calculating the radial stress
                     # 因 d e f 数值较小，可简化为[a, 0, 0], [0, b, 0], [0, 0, c]
                     principal_stress_per_atom_type_i = [a, b, c]
                     principal_stress_s_type_i.append([a, b, c])  # 主应力
-
                 # create 3 list containing the principal_stress at x y z direction
                 # 主应力在x y z 方向分量
                 principal_stress_x_type_i.append(principal_stress_per_atom_type_i[0])
                 principal_stress_y_type_i.append(principal_stress_per_atom_type_i[1])
                 principal_stress_z_type_i.append(principal_stress_per_atom_type_i[2])
-
                 posi = [posi_x, posi_y, posi_z]
                 pos_s.append(posi)
 
-            # cal principal_stress_all
+            # step 2 cal radial_stress_s
             # 注意 以上的stress 并非真正的stress 其包含了体积项  本步将除去原子体积
             radial_stress_s_type_i = []
             for i in range(len(principal_stress_s_type_i)):
@@ -181,10 +211,9 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
                 ['x', 'y', 'z', 'c_peratom[1]', 'c_peratom[2]', 'c_peratom[3]', 'c_peratom[4]', 'c_peratom[5]',
                  'c_peratom[6]']].astype(float)
             radial_stress_s.append(radial_stress_s_type_i_df)
-
         radial_stress_s_all.append(radial_stress_s)
 
-        # stress all # xx yy zz 方向应力及三个方向应力合力的模
+        # step 3 cal xx yy zz 方向应力及三个方向应力合力的模
         p_s = []
         for index in range(len(elements)):
             ids = p_s_all[frame][index]['id']
@@ -193,28 +222,23 @@ def cal_stress_s(p_s_all, elements, centreid_s, calPrincipal_stress=False):
             pz = p_s_all[frame][index]['c_peratom[3]']
             # cal the results
             atom_volumes_i = atom_volumes_s[index]
-
-            stressxyz_per_atom_type_i = np.sqrt((px ** 2 + py ** 2 + pz ** 2)) / (atom_volumes_i * 1) * (
-                0.0001)  # xyz三个方向上的合应力模，注意，方向各不相同
-
-            stressx_per_atom_type_i = px / (atom_volumes_i * 1) * 0.0001  # x方向上的应力的模，注意，方向各不相同
-            stressy_per_atom_type_i = py / (atom_volumes_i * 1) * 0.0001  # y方向上的应力的模，注意，方向各不相同
-            stressz_per_atom_type_i = pz / (atom_volumes_i * 1) * 0.0001  # z方向上的应力的模，注意，方向各不相同
-
+            stressxyz_per_atom_type_i = np.sqrt((px ** 2 + py ** 2 + pz ** 2)) / (atom_volumes_i * 1) * (0.0001)
+            # xyz三个方向上的合应力模，注意，方向各不相同
+            stressx_per_atom_type_i = px / (atom_volumes_i * 1) * 0.0001
+            # x方向上的应力的模，注意，方向各不相同
+            stressy_per_atom_type_i = py / (atom_volumes_i * 1) * 0.0001
+            stressz_per_atom_type_i = pz / (atom_volumes_i * 1) * 0.0001
             # create a df to store the results
             stress_per_atom_type_i = pd.DataFrame(ids, columns=['id']).astype(int)
             stress_per_atom_type_i['type'] = p_s_all[frame][index]['type'].astype(int)
-
             stress_per_atom_type_i['stress_xyz'] = stressxyz_per_atom_type_i.astype(float)
             stress_per_atom_type_i['stress_x'] = stressx_per_atom_type_i.astype(float)
             stress_per_atom_type_i['stress_y'] = stressy_per_atom_type_i.astype(float)
             stress_per_atom_type_i['stress_z'] = stressz_per_atom_type_i.astype(float)
-
             p_s.append(stress_per_atom_type_i)
         stress_s_all.append(p_s)
 
-    radial_stress_s_all_combined = merge_dfs(radial_stress_s_all)  # xx yy zz 方向应力及三个方向应力合力的模，未考虑xy xz yz 方向
-
+    radial_stress_s_all_combined = merge_dfs(radial_stress_s_all)  # radial fangxiang
     stress_s_all_combined = merge_dfs(stress_s_all)  # xx yy zz 方向应力及三个方向应力合力的模，未考虑xy xz yz 方向
 
     return radial_stress_s_all_combined, stress_s_all_combined
