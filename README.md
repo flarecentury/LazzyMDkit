@@ -1,9 +1,22 @@
 # LazzyMDkit
-Warning! The toolkit is still under development, one should use it will caution
 
-This tool are originally designed to analysis the ReaxFF MD results, which includes:
-- Visualization of MD trajs
-- Analysis of LAMMPS dump data: charge/stress/viral forces/...
-- ...
+⚠️ **Warning:** This toolkit is still under active development. Use with caution.
 
-Many thanks to the opensource community, all the python packages included in the code and the contributors behind the scene is appreciated!
+## Overview
+
+LazzyMDkit is a tool originally designed for analyzing ReaxFF Molecular Dynamics (MD) results. Its features include:
+
+- Visualization of MD trajectories
+- Analysis of LAMMPS dump data, including:
+  - Charge distribution
+  - Stress analysis
+  - Virial forces
+- ... (more features to be added)
+
+## Acknowledgements
+
+We extend our heartfelt gratitude to the open-source community. This project wouldn't be possible without the Python packages incorporated in our code and the dedicated contributors behind them.
+
+## Contributing
+
+As this project is in its early stages, we welcome contributions, feedback, and suggestions. Please feel free to open issues or submit pull requests.
